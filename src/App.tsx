@@ -10,7 +10,6 @@ function App() {
   const [url, setUrl] = useState('');
   const [range, setRange] = useState([0,0]);
   const [duration, setDuration] = useState(0);
-  const [played, setPlayed] = useState(0.0);
 
   const playerRef = useRef<ReactPlayer>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -30,10 +29,14 @@ function App() {
   }
 
   const handleProgress = (state: OnProgressProps) => {
-    //console.log(playedSeconds)
     if(state.playedSeconds >= range[1]) {
       playerRef.current?.seekTo(range[0] / duration);
     }
+  }
+
+  const handleDuration = (duration: number) => {
+    setRange([0,Math.min(30,duration)]);
+    setDuration(duration);
   }
 
   const handleRangeChange = (
@@ -54,6 +57,15 @@ function App() {
         minRange = Math.max(newValue[0], newValue[1] - maxDistance);
         setRange([minRange, newValue[1]]);
       }
+    } else if (newValue[1] - newValue[0] < minDistance) {
+      if (activeThumb === 0) {
+        minRange = Math.min(newValue[0], duration - minDistance);
+        setRange([minRange, minRange + minDistance]);
+      } else {
+        const clamped = Math.max(newValue[1], minDistance);
+        minRange = clamped - minDistance;
+        setRange([minRange, clamped]);
+      }
     } else {
       minRange = newValue[0];
       setRange(newValue as number[]);
@@ -61,31 +73,10 @@ function App() {
     playerRef.current?.seekTo(minRange / duration);
   };
 
-  const handleRangeChange2 = (
-      event: Event,
-      newValue: number | number[],
-      activeThumb: number,
-    ) => {
-      if (!Array.isArray(newValue)) {
-        return;
-      }
-
-      let minRange = 0;
-      if (activeThumb === 0) {
-        minRange = Math.min(newValue[0], range[1] - minDistance);
-        setRange([Math.max(minRange, range[1] - maxDistance), range[1]]);
-      } else {
-        minRange = range[0];
-        setRange([minRange, Math.min(Math.max(newValue[1], range[0] + minDistance), range[0] + maxDistance)]);
-      }
-
-      playerRef.current?.seekTo(minRange / duration);
-  };
-
   return (
     <div className="grid justify-center justify-items-center h-full w-full">
 
-      <div className="flex w-2/3 h-auto justify-center items-center">
+      <div className="flex w-4/5 h-auto justify-center items-center">
         {url ? 
           <ReactPlayer
             ref={playerRef}
@@ -93,8 +84,7 @@ function App() {
             height='100%'
             playing={true}
             muted={true}
-            played={played}
-            onDuration={setDuration}
+            onDuration={handleDuration}
             url={url}
             onProgress={handleProgress}
           />
