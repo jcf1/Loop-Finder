@@ -17,7 +17,7 @@ function App() {
 
   const playerRef = useRef<ReactPlayer>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
-  const ffmpegRef = useRef(new FFmpeg());
+  const ffmpegRef = useRef<FFmpeg>(new FFmpeg());
   const messageRef = useRef<HTMLParagraphElement | null>(null);
 
   useEffect(() => {
@@ -55,19 +55,26 @@ function App() {
   }
 
   const clipSegment = async () => {
+    console.log("CLIPPING")
     const ffmpeg = ffmpegRef.current;
     const start = timeStr(range[0]);
     const len = range[1] - range[0];
-    await ffmpeg.writeFile('input.mp4', await fetchFile(url));
     await ffmpeg.exec(['-ss', start, '-i', 'input.mp4', '-t', len.toString(), 'output.mp4']);
     const data = await ffmpeg.readFile('output.mp4');
     const blob = new Blob([data], {"type" : "video\/mp4"})
-    saveAs(blob, "test.mp4");    
+    saveAs(blob, "test.mp4");
   }
 
-  const fileTest = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if(e.target.files) {
-      setUrl(URL.createObjectURL(e.target.files[0]));
+  const uploadFile = async (_url: string) => {
+    const ffmpeg = ffmpegRef.current;
+    await ffmpeg.writeFile('input.mp4', await fetchFile(_url));
+  }
+
+  const fileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if(e.target.files && e.target.files.length > 0) {
+      let _url = URL.createObjectURL(e.target.files[0]);
+      uploadFile(_url);
+      setUrl(_url);
     }
   }
 
@@ -158,7 +165,7 @@ function App() {
         </div>
       </div>
 
-      <input className="invisible" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileTest(e)}/>
+      <input className="invisible" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileSelect(e)}/>
       <input className="w-4/5 h-auto text-white bg-blue-600" type="button" value="Browse..." onClick={() => uploadRef.current?.click()}/>
 
       <input className="w-4/5 h-auto text-white bg-red-500" type="button" value="Clip" onClick={clipSegment}/>
