@@ -15,6 +15,8 @@ function App() {
   const [range, setRange] = useState([0,0]);
   const [duration, setDuration] = useState(0);
 
+  const [gifs, setGifs] = useState<File[]>([]);
+
   const playerRef = useRef<ReactPlayer>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const ffmpegRef = useRef<FFmpeg>(new FFmpeg());
@@ -54,15 +56,67 @@ function App() {
     return String(hours) + ":" + String(minutes).padStart(2,'0') + ":" + String(seconds).padStart(2,'0');
   }
 
-  const clipSegment = async () => {
-    console.log("CLIPPING")
+  const submitSegment = async () => {
+    console.log("SUBMIT");
+
     const ffmpeg = ffmpegRef.current;
     const start = timeStr(range[0]);
     const len = range[1] - range[0];
     await ffmpeg.exec(['-ss', start, '-i', 'input.mp4', '-t', len.toString(), 'output.mp4']);
     const data = await ffmpeg.readFile('output.mp4');
     const blob = new Blob([data], {"type" : "video\/mp4"})
-    saveAs(blob, "test.mp4");
+    const file = new File([blob], 'clip.mp4', {
+      type: blob.type,
+    });
+
+    console.log("Created Clip");
+
+    if(file === null) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const endpoint = "http://0.0.0.0:8000/uploadfile";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: formData
+      });
+      const data = await response.json();
+
+      console.log(response);
+      console.log(data);
+
+
+      if(response.ok) {
+        console.log("File uploaded successfully");
+        createGifs(data.gifs);
+      } else {
+        console.error("Upload Failed");
+      }
+    } catch(error) {
+      console.log(error);
+    }
+  }
+
+  const createGifs = async (responseList: []) => {
+    const ffmpeg = ffmpegRef.current;
+    let _gifs = [];
+    for(let i = 0; i < responseList.length; i++) {
+      let ss = timeStr(range[0] + responseList[i][0]);
+      let t = responseList[i][1];
+
+      await ffmpeg.exec(['-ss', ss, '-i', 'input.mp4', '-t', String(t), String(i)+'.gif']);
+      const data = await ffmpeg.readFile(String(i)+'.gif');
+      const blob = new Blob([data], {"type" : "image\/gif"})
+      const file = new File([blob], String(i)+".gif", {
+        type: blob.type,
+      });
+      _gifs.push(file);
+    }
+    setGifs(_gifs)
   }
 
   const uploadFile = async (_url: string) => {
@@ -123,6 +177,22 @@ function App() {
     playerRef.current?.seekTo(minRange / duration);
   };
 
+  const createGifList = () => {
+    return <ul>
+      {gifs.map(item => {
+        return (
+          <li
+            key={item.name}
+          >
+            <div>{item.name}</div>
+            <img src={URL.createObjectURL(item)}/>
+          </li>
+        );
+      })}
+    </ul>;
+  }
+
+
   return loaded ? (
     <div className="grid justify-center justify-items-center h-full w-full">
 
@@ -139,7 +209,9 @@ function App() {
             onProgress={handleProgress}
           />
           :
-          <div className="w-full h-full bg-black"/>
+          <div className="w-full h-full bg-white">
+            TEST
+          </div>
         }
       </div>
 
@@ -167,8 +239,16 @@ function App() {
 
       <input className="invisible" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileSelect(e)}/>
       <input className="w-4/5 h-auto text-white bg-blue-600" type="button" value="Browse..." onClick={() => uploadRef.current?.click()}/>
+      <input className="w-4/5 h-auto text-white bg-green-500" type="button" value="Submit" onClick={submitSegment}/>
 
-      <input className="w-4/5 h-auto text-white bg-red-500" type="button" value="Clip" onClick={clipSegment}/>
+      { gifs.length == 0 ? (
+          <div></div>
+        ) : (
+          createGifList()
+        )
+      }
+
+
     </div>
   ) : (
     <div>
