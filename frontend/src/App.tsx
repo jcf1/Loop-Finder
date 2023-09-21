@@ -4,12 +4,13 @@ import Slider from '@mui/material/Slider';
 import { OnProgressProps } from 'react-player/base';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
-import { saveAs } from 'file-saver';
+import './App.css';
 
 function App() {
   const minDistance = 1;
   const maxDistance = 60;
 
+  const [running, setRun] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [url, setUrl] = useState('');
   const [range, setRange] = useState([0,0]);
@@ -59,6 +60,8 @@ function App() {
   const submitSegment = async () => {
     console.log("SUBMIT");
 
+    setRun(true);
+
     const ffmpeg = ffmpegRef.current;
     const start = timeStr(range[0]);
     const len = range[1] - range[0];
@@ -96,8 +99,11 @@ function App() {
       } else {
         console.error("Upload Failed");
       }
+
+      setRun(false);
     } catch(error) {
       console.log(error);
+      setRun(false);
     }
   }
 
@@ -178,26 +184,28 @@ function App() {
   };
 
   const createGifList = () => {
-    return <ul>
-      {gifs.map(item => {
-        return (
-          <li
-            key={item.name}
-          >
-            <div>{item.name}</div>
-            <img src={URL.createObjectURL(item)}/>
-          </li>
-        );
-      })}
-    </ul>;
+    return <ul className='h-full w-full'>
+        {gifs.map((item, idx) => {
+          return (
+            <li className={'h-[12rem] w-full ' + (((idx % 2) === 0) ? 'bg-slate-400' : 'bg-slate-600')} key={item.name}>
+              <div className='flex h-full w-full justify-between'>
+                <img className='h-[10rem] w-auto mt-auto mb-auto ml-2' src={URL.createObjectURL(item)}/>
+                <div className='mt-auto mb-auto text-2xl'>{item.name}</div>
+                <a className='mt-auto mb-auto' href={URL.createObjectURL(item)} download={item.name} target='_blank'>
+                  <input className='h-[4rem] w-[6rem] mt-auto mb-auto mr-2 text-xl bg-violet-600' type='button' value="Download"/>
+                </a>
+              </div>
+            </li>
+          );
+        })}
+      </ul>;
   }
 
-
   return loaded ? (
-    <div className="grid justify-center justify-items-center h-full w-full">
+    <div className="grid justify-center justify-items-center h-screen w-screen">
 
-      <div className="flex w-4/5 h-auto justify-center items-center">
-        {url ? 
+      <div className="flex w-[48rem] h-[27rem] mt-10 justify-center items-center bg-black">
+        {url ?
           <ReactPlayer
             ref={playerRef}
             width='100%'
@@ -209,13 +217,11 @@ function App() {
             onProgress={handleProgress}
           />
           :
-          <div className="w-full h-full bg-white">
-            TEST
-          </div>
+          <div className='w-full h-full bg-black'/>
         }
       </div>
 
-      <div className="w-full justify-center items-center">
+      <div className="w-full mt-5 justify-center items-center">
         <Slider
           getAriaLabel={() => 'Minimum distance'}
           value={range}
@@ -241,12 +247,9 @@ function App() {
       <input className="w-4/5 h-auto text-white bg-blue-600" type="button" value="Browse..." onClick={() => uploadRef.current?.click()}/>
       <input className="w-4/5 h-auto text-white bg-green-500" type="button" value="Submit" onClick={submitSegment}/>
 
-      { gifs.length == 0 ? (
-          <div></div>
-        ) : (
-          createGifList()
-        )
-      }
+      <div className='flex h-[30rem] w-full mt-10 justify-center items-center overflow-scroll bg-slate-500'>
+        { gifs.length > 0 && createGifList() }
+      </div>
 
 
     </div>
