@@ -11,10 +11,15 @@ function App() {
   const maxDistance = 60;
 
   const [running, setRun] = useState(false);
+
   const [loaded, setLoaded] = useState(false);
   const [url, setUrl] = useState('');
-  const [range, setRange] = useState([0,0]);
+  const [durationRange, setDurationRange] = useState([0,0]);
+  const [lengthRange, setLengthRange] = useState([0.5,10]);
   const [duration, setDuration] = useState(0);
+
+  const [threshold, setThreshold] = useState(0.95);
+  const [evaluation, setEvaluation] = useState("quality");
 
   const [gifs, setGifs] = useState<File[]>([]);
 
@@ -26,7 +31,7 @@ function App() {
   useEffect(() => {
     load();
   }, []);
-
+  
   const load = async () => {
     const baseURL = "https://unpkg.com/@ffmpeg/core-mt@0.12.2/dist/esm";
     const ffmpeg = ffmpegRef.current;
@@ -59,13 +64,14 @@ function App() {
 
   const submitSegment = async () => {
     console.log("SUBMIT");
-
     setRun(true);
 
+    const s = durationRange[0];
+
     const ffmpeg = ffmpegRef.current;
-    const start = timeStr(range[0]);
-    const len = range[1] - range[0];
-    await ffmpeg.exec(['-ss', start, '-i', 'input.mp4', '-t', len.toString(), 'output.mp4']);
+    const start = timeStr(s);
+    const len = durationRange[1] - s;
+    await ffmpeg.exec(['-ss', start, '-t', len.toString(), '-i', 'input.mp4', '-c', 'copy', 'output.mp4']);
     const data = await ffmpeg.readFile('output.mp4');
     const blob = new Blob([data], {"type" : "video\/mp4"})
     const file = new File([blob], 'clip.mp4', {
@@ -80,7 +86,11 @@ function App() {
 
     const formData = new FormData();
     formData.append('file', file);
-
+    formData.append('minLen', String(lengthRange[0]));
+    formData.append('maxLen', String(lengthRange[1]));
+    formData.append('threshold', String(threshold));
+    formData.append('eval', evaluation);
+    
     try {
       const endpoint = "http://0.0.0.0:8000/uploadfile";
       const response = await fetch(endpoint, {
@@ -95,7 +105,7 @@ function App() {
 
       if(response.ok) {
         console.log("File uploaded successfully");
-        createGifs(data.gifs);
+        createGifs(data.gifs, s);
       } else {
         console.error("Upload Failed");
       }
@@ -107,14 +117,16 @@ function App() {
     }
   }
 
-  const createGifs = async (responseList: []) => {
+  const createGifs = async (responseList: [], startTime: number) => {
     const ffmpeg = ffmpegRef.current;
     let _gifs = [];
     for(let i = 0; i < responseList.length; i++) {
-      let ss = timeStr(range[0] + responseList[i][0]);
+      let ss = timeStr(startTime + responseList[i][0]);
       let t = responseList[i][1];
 
-      await ffmpeg.exec(['-ss', ss, '-i', 'input.mp4', '-t', String(t), String(i)+'.gif']);
+      console.log()
+      //ss.replace(':','-')+'_'+timeStr(startTime + t).replace(':','-')
+      await ffmpeg.exec(['-ss', ss, '-t', String(t), '-i', 'input.mp4', i+'.gif']);
       const data = await ffmpeg.readFile(String(i)+'.gif');
       const blob = new Blob([data], {"type" : "image\/gif"})
       const file = new File([blob], String(i)+".gif", {
@@ -139,17 +151,17 @@ function App() {
   }
 
   const handleProgress = (state: OnProgressProps) => {
-    if(state.playedSeconds >= range[1]) {
-      playerRef.current?.seekTo(range[0] / duration);
+    if(state.playedSeconds >= durationRange[1]) {
+      playerRef.current?.seekTo(durationRange[0] / duration);
     }
   }
 
   const handleDuration = (duration: number) => {
-    setRange([0,Math.min(30,duration)]);
+    setDurationRange([0,Math.min(30,duration)]);
     setDuration(duration);
   }
 
-  const handleRangeChange = (
+  const handleDurationChange = (
     event: Event,
     newValue: number | number[],
     activeThumb: number,
@@ -162,35 +174,62 @@ function App() {
     if (newValue[1] - newValue[0] > maxDistance) {
       if (activeThumb === 0) {
         minRange = newValue[0];
-        setRange([minRange, Math.min(newValue[1], newValue[0] + maxDistance)]);
+        setDurationRange([minRange, Math.min(newValue[1], newValue[0] + maxDistance)]);
       } else {
         minRange = Math.max(newValue[0], newValue[1] - maxDistance);
-        setRange([minRange, newValue[1]]);
+        setDurationRange([minRange, newValue[1]]);
       }
     } else if (newValue[1] - newValue[0] < minDistance) {
       if (activeThumb === 0) {
         minRange = Math.min(newValue[0], duration - minDistance);
-        setRange([minRange, minRange + minDistance]);
+        setDurationRange([minRange, minRange + minDistance]);
       } else {
         const clamped = Math.max(newValue[1], minDistance);
         minRange = clamped - minDistance;
-        setRange([minRange, clamped]);
+        setDurationRange([minRange, clamped]);
       }
     } else {
       minRange = newValue[0];
-      setRange(newValue as number[]);
+      setDurationRange(newValue as number[]);
     }
     playerRef.current?.seekTo(minRange / duration);
+  };
+
+  const handleLengthChange = (
+    event: Event,
+    newValue: number | number[],
+    activeThumb: number,
+  ) => {
+    if (!Array.isArray(newValue)) {
+      return;
+    }
+
+    let minRange = 0.5;
+    let minDist = 0.5;
+    let maxDist = 60;
+    if (newValue[1] - newValue[0] < minDist) {
+      if (activeThumb === 0) {
+        minRange = Math.min(newValue[0], maxDist - minDist);
+        setLengthRange([minRange, minRange + minDist]);
+      } else {
+        const clamped = Math.max(newValue[1], minDist);
+        minRange = clamped - minDist;
+        setLengthRange([minRange, clamped]);
+      }
+    } else {
+      minRange = newValue[0];
+      setLengthRange(newValue as number[]);
+    }
   };
 
   const createGifList = () => {
     return <ul className='h-full w-full'>
         {gifs.map((item, idx) => {
           return (
-            <li className={'h-[12rem] w-full ' + (((idx % 2) === 0) ? 'bg-slate-400' : 'bg-slate-600')} key={item.name}>
+            <li className={'h-auto w-full pt-3 pb-3 ' + (((idx % 2) === 0) ? 'bg-slate-400' : 'bg-slate-600')} key={item.name}>
               <div className='flex h-full w-full justify-between'>
-                <img className='h-[10rem] w-auto mt-auto mb-auto ml-2' src={URL.createObjectURL(item)}/>
-                <div className='mt-auto mb-auto text-2xl'>{item.name}</div>
+                <img className='h-auto w-2/5 mt-auto mb-auto ml-2' src={URL.createObjectURL(item)}/>
+                <div className='mt-auto mb-auto text-l'>{item.name}</div>
                 <a className='mt-auto mb-auto' href={URL.createObjectURL(item)} download={item.name} target='_blank'>
                   <input className='h-[4rem] w-[6rem] mt-auto mb-auto mr-2 text-xl bg-violet-600' type='button' value="Download"/>
                 </a>
@@ -202,55 +241,106 @@ function App() {
   }
 
   return loaded ? (
-    <div className="grid justify-center justify-items-center h-screen w-screen">
-
-      <div className="flex w-[48rem] h-[27rem] mt-10 justify-center items-center bg-black">
-        {url ?
-          <ReactPlayer
-            ref={playerRef}
-            width='100%'
-            height='100%'
-            playing={true}
-            muted={true}
-            onDuration={handleDuration}
-            url={url}
-            onProgress={handleProgress}
-          />
-          :
-          <div className='w-full h-full bg-black'/>
-        }
-      </div>
-
-      <div className="w-full mt-5 justify-center items-center">
-        <Slider
-          getAriaLabel={() => 'Minimum distance'}
-          value={range}
-          min={0}
-          max={duration}
-          step={1}
-          onChange={handleRangeChange}
-          valueLabelDisplay="auto"
-          disableSwap
-        />
-      </div>
-
-      <div className="flex w-full justify-between">
-        <div className='text-2xl'>
-          {timeStr(range[0])}
+    <div className="justify-center justify-items-center h-screen w-full overscroll-none">
+      
+      <div className="grid float-left justify-center justify-items-center align-middle w-3/5 h-full bg-red-50">
+        <div className="flex w-[40vw] h-[22.5vw] mt-10 justify-center items-center">
+          {url ?
+            <ReactPlayer
+              ref={playerRef}
+              width='100%'
+              height='100%'
+              playing={true}
+              muted={true}
+              onDuration={handleDuration}
+              url={url}
+              onProgress={handleProgress}
+            />
+            :
+            <div className='w-full h-full bg-black'/>
+          }
         </div>
-        <div className='text-2xl'>
-          {timeStr(range[1])}
+
+        <div className="flex-row w-4/5 h-1/6 text-center">
+          <div className="table w-full">
+            <input className="invisible w-0 h-0" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileSelect(e)}/>
+            <input className="table-cell w-1/3 mr-4 h-auto text-white bg-blue-600" type="button" value="Browse..." disabled={running} onClick={() => uploadRef.current?.click()}/>
+            <input className="table-cell w-1/3 ml-4 h-auto text-white bg-green-500" type="button" value="Submit" disabled={running || url == ''} onClick={submitSegment}/>
+          </div>
+        </div>
+
+        <div className="w-10/12 mt-5 justify-center items-center">
+          <div className="w-full">
+            <Slider
+              getAriaLabel={() => 'Minimum distance'}
+              value={durationRange}
+              min={0}
+              max={duration}
+              step={1}
+              onChange={handleDurationChange}
+              valueLabelDisplay="auto"
+              disableSwap
+            />
+          </div>
+
+          <div className="flex justify-between">
+            <div className='text-2xl'>
+              {timeStr(durationRange[0])}
+            </div>
+            <div className='text-2xl'>
+              {timeStr(durationRange[1])}
+            </div>
+          </div>
+        </div>
+        
+        <div className="w-10/12 mt-5 justify-center items-center">
+          <div className="w-full">
+            <Slider
+              getAriaLabel={() => 'Minimum distance'}
+              value={lengthRange}
+              min={0.5}
+              max={60}
+              step={0.5}
+              onChange={handleLengthChange}
+              valueLabelDisplay="auto"
+              disableSwap
+            />
+          </div>
+
+          <div className="flex justify-between">
+            <div className='text-2xl'>
+              {lengthRange[0]}
+            </div>
+            <div className='text-2xl'>
+              {lengthRange[1]}
+            </div>
+          </div>
+        </div>
+
+        <div className="table justify-center text-xl pt-4">
+          <div className="table-cell pr-2">
+            Threshold set to {threshold}:
+          </div>
+          <input className="table-cell border" type="range" max={1} min={0.85} step={0.01} value={threshold} onChange={(e) => setThreshold(parseFloat(e.target.value))}/>
+        </div>
+
+        <div className="table justify-center text-xl pt-4">
+          <div className="table-cell pr-8">Create matches based on:</div>
+            <label className="table-cell pr-8">
+              <input className="border mr-2" type="radio" value={"quality"} checked={evaluation=="quality"} onChange={(e) => setEvaluation(e.target.value)} />
+              Prioritize Better Looping Gifs
+            </label>
+            <label className="table-cell pr-8">
+              <input className="border mr-2" type="radio" value={"length"} checked={evaluation=="length"} onChange={(e) => setEvaluation(e.target.value)} />
+              Prioritize Long Gifs
+            </label>
         </div>
       </div>
+        
 
-      <input className="invisible" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileSelect(e)}/>
-      <input className="w-4/5 h-auto text-white bg-blue-600" type="button" value="Browse..." onClick={() => uploadRef.current?.click()}/>
-      <input className="w-4/5 h-auto text-white bg-green-500" type="button" value="Submit" onClick={submitSegment}/>
-
-      <div className='flex h-[30rem] w-full mt-10 justify-center items-center overflow-scroll bg-slate-500'>
+      <div className="grid float-right w-2/5 h-full justify-center justify-items-center overflow-scroll bg-slate-500">
         { gifs.length > 0 && createGifList() }
       </div>
-
 
     </div>
   ) : (

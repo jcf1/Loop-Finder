@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Form
 from tempfile import NamedTemporaryFile
 from fastapi.middleware.cors import CORSMiddleware
 from .loopFinder import loopFinder
@@ -22,34 +22,16 @@ app.add_middleware(
 
 @app.get("/", tags=["root"])
 async def read_root() -> dict:
-    return {"message": "Welcome to your todo list."}
+    return {"message": "This is a placeholder. DO NOT FORGET TO CHANGE!!!"}
 
-'''
 @app.post("/uploadfile")
-async def create_upload_file(file: UploadFile):
-    temp = NamedTemporaryFile(delete=False)
-    try:
-        try:
-            data = await file.read()
-            with temp as f:
-                f.write(data)
-        except Exception:
-            return {"message": "There was an error uploading the file"}
-        finally:
-            file.close()
-        
-        video = VideoFileClip(file.file.name)
-        lf = loopFinder(video)
-        gifs = lf.process_clip()
-    except Exception as error:
-        print(error)
-        return {"message": "There was an error processing the file"}
-    finally:
-        os.remove(temp.name)
-    return {"gifs": gifs}
-'''
-@app.post("/uploadfile")
-async def create_upload_file(file: UploadFile):
+async def create_upload_file(
+    minLen: str = Form(...),
+    maxLen: str = Form(...),
+    threshold: str = Form(...),
+    eval: str = Form(...),
+    file: UploadFile = File(...)
+):
     temp = NamedTemporaryFile(delete=False)
     try:
         data = await file.read()
@@ -60,7 +42,7 @@ async def create_upload_file(file: UploadFile):
     finally:
         file.close()
     video = VideoFileClip(temp.name)
-    lf = loopFinder(video)
+    lf = loopFinder(video, float(minLen), float(maxLen), float(threshold), eval)
     gifs = lf.process_clip()
 
     os.remove(temp.name)

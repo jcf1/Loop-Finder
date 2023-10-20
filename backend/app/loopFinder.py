@@ -6,14 +6,15 @@ from datetime import timedelta, datetime
 from moviepy.editor import VideoFileClip
 
 class loopFinder:
-    def __init__(self, clip):
+    def __init__(self, clip, minLen, maxLen, threshold, eval):
         self.clip = clip
         self.frames = 30
-        self.minLen = 0.5
-        self.maxLen = 10
+        self.minLen = minLen
+        self.maxLen = maxLen
         self.hashSize = 32
         self.bands = 32
-        self.threshold = 0.8
+        self.threshold = threshold
+        self.eval = eval
 
     def format_timedelta(self, td):
         result = str(td)
