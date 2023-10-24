@@ -106,7 +106,14 @@ class loopFinder:
                         break
                 
         # Sort near-duplicates by descending similarity and return
-        near_duplicates.sort(key=lambda x:x[2], reverse=True)
+        if self.eval == 'quality':
+            near_duplicates.sort(key=lambda x: x[2], reverse=True)
+        elif self.eval == 'length':
+            def calc_length(cpa, cpb):
+                start_obj = datetime.strptime(cpa, '%H-%M-%S.%f')
+                end_obj   = datetime.strptime(cpb, '%H-%M-%S.%f')
+                return end_obj - start_obj
+            near_duplicates.sort(key=lambda x: calc_length(x[0], x[1]), reverse=True)
         return near_duplicates
 
     def prune_candidates(self, sims):

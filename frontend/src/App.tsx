@@ -4,24 +4,30 @@ import Slider from '@mui/material/Slider';
 import { OnProgressProps } from 'react-player/base';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
+import { NewtonsCradle, ThreeBody } from '@uiball/loaders'
 import './App.css';
 
 function App() {
   const minDistance = 1;
   const maxDistance = 60;
-
-  const [running, setRun] = useState(false);
+  
+  const perPage = 5;
 
   const [loaded, setLoaded] = useState(false);
+
+  const [running, setRun] = useState(false);
+  
   const [url, setUrl] = useState('');
   const [durationRange, setDurationRange] = useState([0,0]);
   const [lengthRange, setLengthRange] = useState([0.5,10]);
   const [duration, setDuration] = useState(0);
-
   const [threshold, setThreshold] = useState(0.95);
   const [evaluation, setEvaluation] = useState("quality");
 
+  const [page, setPage] = useState(1);
   const [gifs, setGifs] = useState<File[]>([]);
+  const [ranges, setRanges] = useState([]);
+  const [sTime, setSTime] = useState(0.0);
 
   const playerRef = useRef<ReactPlayer>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -38,8 +44,6 @@ function App() {
     ffmpeg.on("log", ({ message }) => {
       if (messageRef.current) messageRef.current.innerHTML = message;
     });
-    // toBlobURL is used to bypass CORS issue, urls with the same
-    // domain can be used directly.
     await ffmpeg.load({
       coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
       wasmURL: await toBlobURL(
@@ -65,9 +69,11 @@ function App() {
   const submitSegment = async () => {
     console.log("SUBMIT");
     setRun(true);
-
+    setGifs([]);
+    setRanges([]);
+    setPage(1);
     const s = durationRange[0];
-
+    setSTime(s);
     const ffmpeg = ffmpegRef.current;
     const start = timeStr(s);
     const len = durationRange[1] - s;
@@ -77,20 +83,16 @@ function App() {
     const file = new File([blob], 'clip.mp4', {
       type: blob.type,
     });
-
     console.log("Created Clip");
-
     if(file === null) {
       return;
     }
-
     const formData = new FormData();
     formData.append('file', file);
     formData.append('minLen', String(lengthRange[0]));
     formData.append('maxLen', String(lengthRange[1]));
     formData.append('threshold', String(threshold));
     formData.append('eval', evaluation);
-    
     try {
       const endpoint = "http://0.0.0.0:8000/uploadfile";
       const response = await fetch(endpoint, {
@@ -105,11 +107,9 @@ function App() {
 
       if(response.ok) {
         console.log("File uploaded successfully");
+        setRanges(data.gifs);
         createGifs(data.gifs, s);
-      } else {
-        console.error("Upload Failed");
       }
-
       setRun(false);
     } catch(error) {
       console.log(error);
@@ -124,12 +124,11 @@ function App() {
       let ss = timeStr(startTime + responseList[i][0]);
       let t = responseList[i][1];
 
-      console.log()
-      //ss.replace(':','-')+'_'+timeStr(startTime + t).replace(':','-')
-      await ffmpeg.exec(['-ss', ss, '-t', String(t), '-i', 'input.mp4', i+'.gif']);
-      const data = await ffmpeg.readFile(String(i)+'.gif');
+      let fname = ss.replaceAll(":","-")+'_'+timeStr(startTime + responseList[i][1]).replaceAll(":","-")+'.gif';
+      await ffmpeg.exec(['-ss', ss, '-t', String(t), '-i', 'input.mp4', fname]);
+      const data = await ffmpeg.readFile(fname);
       const blob = new Blob([data], {"type" : "image\/gif"})
-      const file = new File([blob], String(i)+".gif", {
+      const file = new File([blob], fname, {
         type: blob.type,
       });
       _gifs.push(file);
@@ -223,12 +222,24 @@ function App() {
   };
 
   const createGifList = () => {
+    if(running) {
+      return (
+        <div className='h-full flex items-center justify-center'>
+          <NewtonsCradle/>
+        </div>
+      );
+    }
+
+    if(gifs.length == 0) {
+      return;
+    }
+
     return <ul className='h-full w-full'>
         {gifs.map((item, idx) => {
           return (
-            <li className={'h-auto w-full pt-3 pb-3 ' + (((idx % 2) === 0) ? 'bg-slate-400' : 'bg-slate-600')} key={item.name}>
-              <div className='flex h-full w-full justify-between'>
-                <img className='h-auto w-2/5 mt-auto mb-auto ml-2' src={URL.createObjectURL(item)}/>
+            <li className={'h-[19.5vh] w-[40vw] pt-3 pb-3 ' + (((idx % 2) === 0) ? 'bg-slate-400' : 'bg-slate-600')} key={item.name}>
+              <div className='h-full w-full flex justify-between'>
+                <img className='h-[18wh] w-[32vh] mt-auto mb-auto ml-2' src={URL.createObjectURL(item)}/>
                 <div className='mt-auto mb-auto text-l'>{item.name}</div>
                 <a className='mt-auto mb-auto' href={URL.createObjectURL(item)} download={item.name} target='_blank'>
                   <input className='h-[4rem] w-[6rem] mt-auto mb-auto mr-2 text-xl bg-violet-600' type='button' value="Download"/>
@@ -237,13 +248,20 @@ function App() {
             </li>
           );
         })}
+        <div className="table flex-row w-full h-[2.5vh] text-center">
+          <input className="table-cell w-1/3 ml-4 h-full" type="button" value="Previous Page" disabled={page == 1} onClick={(e) => setPage(page - 1)}/>
+          <div>
+            Page {page} of {Math.ceil(ranges.length / perPage)}
+          </div>
+          <input className="table-cell w-1/3 ml-4 h-full" type="button" value="Next Page" disabled={page == Math.ceil(ranges.length / perPage)} onClick={(e) => setPage(page + 1)}/>
+        </div>
       </ul>;
   }
 
   return loaded ? (
     <div className="justify-center justify-items-center h-screen w-full overscroll-none">
       
-      <div className="grid float-left justify-center justify-items-center align-middle w-3/5 h-full bg-red-50">
+      <div className="grid float-left justify-center justify-items-center align-middle w-3/5 h-full bg-slate-300">
         <div className="flex w-[40vw] h-[22.5vw] mt-10 justify-center items-center">
           {url ?
             <ReactPlayer
@@ -279,6 +297,7 @@ function App() {
               step={1}
               onChange={handleDurationChange}
               valueLabelDisplay="auto"
+              disabled={running}
               disableSwap
             />
           </div>
@@ -303,6 +322,7 @@ function App() {
               step={0.5}
               onChange={handleLengthChange}
               valueLabelDisplay="auto"
+              disabled={running}
               disableSwap
             />
           </div>
@@ -321,17 +341,17 @@ function App() {
           <div className="table-cell pr-2">
             Threshold set to {threshold}:
           </div>
-          <input className="table-cell border" type="range" max={1} min={0.85} step={0.01} value={threshold} onChange={(e) => setThreshold(parseFloat(e.target.value))}/>
+          <input className="table-cell border" type="range" max={1} min={0.85} step={0.01} value={threshold} disabled={running} onChange={(e) => setThreshold(parseFloat(e.target.value))}/>
         </div>
 
         <div className="table justify-center text-xl pt-4">
           <div className="table-cell pr-8">Create matches based on:</div>
             <label className="table-cell pr-8">
-              <input className="border mr-2" type="radio" value={"quality"} checked={evaluation=="quality"} onChange={(e) => setEvaluation(e.target.value)} />
+              <input className="border mr-2" type="radio" value={"quality"} checked={evaluation=="quality"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
               Prioritize Better Looping Gifs
             </label>
             <label className="table-cell pr-8">
-              <input className="border mr-2" type="radio" value={"length"} checked={evaluation=="length"} onChange={(e) => setEvaluation(e.target.value)} />
+              <input className="border mr-2" type="radio" value={"length"} checked={evaluation=="length"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
               Prioritize Long Gifs
             </label>
         </div>
@@ -339,13 +359,13 @@ function App() {
         
 
       <div className="grid float-right w-2/5 h-full justify-center justify-items-center overflow-scroll bg-slate-500">
-        { gifs.length > 0 && createGifList() }
+        { createGifList() }
       </div>
 
     </div>
   ) : (
-    <div>
-      LOADING
+    <div className='h-screen flex items-center justify-center bg-slate-300'>
+      <ThreeBody/>
     </div>
   )
 }
