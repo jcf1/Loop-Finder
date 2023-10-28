@@ -4,7 +4,9 @@ import Slider from '@mui/material/Slider';
 import { OnProgressProps } from 'react-player/base';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
-import { NewtonsCradle, ThreeBody } from '@uiball/loaders'
+import { NewtonsCradle, ThreeBody, Waveform } from '@uiball/loaders'
+import { IconContext } from "react-icons";
+import { BiDownload } from "react-icons/bi";
 import './App.css';
 
 function App() {
@@ -25,9 +27,10 @@ function App() {
   const [evaluation, setEvaluation] = useState("quality");
 
   const [page, setPage] = useState(1);
-  const [gifs, setGifs] = useState<File[]>([]);
   const [ranges, setRanges] = useState([]);
   const [sTime, setSTime] = useState(0.0);
+  const [gifs, setGifs] = useState<File[]>([]);
+  const [loadGifs, setLoadGifs] = useState(false);
 
   const playerRef = useRef<ReactPlayer>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -69,7 +72,6 @@ function App() {
   const submitSegment = async () => {
     console.log("SUBMIT");
     setRun(true);
-    setGifs([]);
     setRanges([]);
     setPage(1);
     const s = durationRange[0];
@@ -108,7 +110,7 @@ function App() {
       if(response.ok) {
         console.log("File uploaded successfully");
         setRanges(data.gifs);
-        createGifs(data.gifs, s);
+        //createGifs(data.gifs, s);
       }
       setRun(false);
     } catch(error) {
@@ -117,14 +119,29 @@ function App() {
     }
   }
 
-  const createGifs = async (responseList: [], startTime: number) => {
+  const fileTimeStr = (seconds: number) => {
+    let milli = seconds % 1;
+    seconds = Math.floor(seconds);
+    let minutes = seconds / 60;
+    let hours = Math.floor(minutes / 60);
+    minutes = Math.floor(minutes % 60);
+    seconds = Math.floor(seconds % 60);
+    return String(hours) + "." + String(minutes).padStart(2,'0') + "." + String(seconds).padStart(2,'0') + "." + String(milli.toFixed(2)).padStart(2,'0');
+  }
+
+  const createGifs = async () => {
     const ffmpeg = ffmpegRef.current;
     let _gifs = [];
-    for(let i = 0; i < responseList.length; i++) {
-      let ss = timeStr(startTime + responseList[i][0]);
-      let t = responseList[i][1];
 
-      let fname = ss.replaceAll(":","-")+'_'+timeStr(startTime + responseList[i][1]).replaceAll(":","-")+'.gif';
+    let sIdx = (page - 1) * perPage;
+    let eIdx = page * perPage;
+    eIdx = eIdx > ranges.length ? ranges.length : eIdx;
+
+    for(let i = sIdx; i < eIdx; i++) {
+      let ss = timeStr(sTime + ranges[i][0]);
+      let t = ranges[i][1];
+      let fname = fileTimeStr(sTime + ranges[i][0])+'_'+fileTimeStr(sTime + ranges[i][0]+ ranges[i][1])+'.gif';
+
       await ffmpeg.exec(['-ss', ss, '-t', String(t), '-i', 'input.mp4', fname]);
       const data = await ffmpeg.readFile(fname);
       const blob = new Blob([data], {"type" : "image\/gif"})
@@ -133,7 +150,7 @@ function App() {
       });
       _gifs.push(file);
     }
-    setGifs(_gifs)
+    return _gifs;
   }
 
   const uploadFile = async (_url: string) => {
@@ -211,7 +228,7 @@ function App() {
         minRange = Math.min(newValue[0], maxDist - minDist);
         setLengthRange([minRange, minRange + minDist]);
       } else {
-        const clamped = Math.max(newValue[1], minDist);
+        const clamped = Math.max(newValue[1], minRange + minDist);
         minRange = clamped - minDist;
         setLengthRange([minRange, clamped]);
       }
@@ -220,6 +237,17 @@ function App() {
       setLengthRange(newValue as number[]);
     }
   };
+
+  useEffect(() => {
+    if(ranges.length > 0 && !loadGifs) {
+      setLoadGifs(true);
+      setGifs([]);
+      createGifs().then((result) => {
+        setGifs(result);
+        setLoadGifs(false);
+      });
+    }
+  }, [page,ranges]);
 
   const createGifList = () => {
     if(running) {
@@ -230,32 +258,53 @@ function App() {
       );
     }
 
-    if(gifs.length == 0) {
+    if(ranges.length == 0) {
       return;
     }
 
-    return <ul className='h-full w-full'>
-        {gifs.map((item, idx) => {
-          return (
-            <li className={'h-[19.5vh] w-[40vw] pt-3 pb-3 ' + (((idx % 2) === 0) ? 'bg-slate-400' : 'bg-slate-600')} key={item.name}>
-              <div className='h-full w-full flex justify-between'>
-                <img className='h-[18wh] w-[32vh] mt-auto mb-auto ml-2' src={URL.createObjectURL(item)}/>
-                <div className='mt-auto mb-auto text-l'>{item.name}</div>
-                <a className='mt-auto mb-auto' href={URL.createObjectURL(item)} download={item.name} target='_blank'>
-                  <input className='h-[4rem] w-[6rem] mt-auto mb-auto mr-2 text-xl bg-violet-600' type='button' value="Download"/>
-                </a>
-              </div>
-            </li>
-          );
-        })}
-        <div className="table flex-row w-full h-[2.5vh] text-center">
-          <input className="table-cell w-1/3 ml-4 h-full" type="button" value="Previous Page" disabled={page == 1} onClick={(e) => setPage(page - 1)}/>
-          <div>
-            Page {page} of {Math.ceil(ranges.length / perPage)}
-          </div>
-          <input className="table-cell w-1/3 ml-4 h-full" type="button" value="Next Page" disabled={page == Math.ceil(ranges.length / perPage)} onClick={(e) => setPage(page + 1)}/>
+    return <div className='h-full w-full'>
+      <ul className='h-[95vh] w-[40vw]'>
+        { gifs.length > 0 ?
+            (gifs.map((item, idx) => {
+              return (
+                <li className={'h-[19vh] w-[40vw] ' + (((idx % 2) === 0) ? 'bg-slate-400' : 'bg-slate-600')} key={item.name}>
+                  <div className='h-full w-full flex justify-between'>
+                    <img className='h-[18wh] w-[32vh] mt-auto mb-auto ml-2' src={URL.createObjectURL(item)}/>
+                    <div className='mt-auto mb-auto text-l'>{item.name}</div>
+                    <a className='mt-auto mb-auto' href={URL.createObjectURL(item)} download={item.name} target='_blank'>
+                      <button className='h-[4rem] w-[6rem] mt-auto mb-auto mr-2 text-xxl'>
+                        <IconContext.Provider value={{color: "white", size: "40"}}>
+                          <BiDownload className='text-xxl'/>
+                        </IconContext.Provider>
+                      </button>
+                    </a>
+                  </div>
+                </li>
+              );
+          })) : (
+            <div className='h-full w-full flex items-center justify-center'>
+              <Waveform/>
+            </div>
+          ) }
+      </ul>
+      <div className="table h-[5vh] w-[40vw] text-center">
+        { page == 1 ? (
+            <div className="table-cell w-[15vw] h-full"/>
+          ) : (
+            <input className="table-cell w-[15vw] h-full bg-slate-200" type="button" value="Previous Page" disabled={page == 1} onClick={(e) => {if(!loadGifs){setPage(page - 1)}}}/>
+          )
+        }
+        <div className="table-cell w-[10vw] h-full text-xl bg-slate-400">
+          Page {page} of {Math.ceil(ranges.length / perPage)}
         </div>
-      </ul>;
+        { page == Math.ceil(ranges.length / perPage) ? (
+            <div className="table-cell w-[15vw] h-full"/>
+          ) : (
+            <input className="table-cell w-[15vw] h-full bg-slate-200" type="button" value="Next Page" disabled={page == Math.ceil(ranges.length / perPage)} onClick={(e) => {if(!loadGifs){setPage(page + 1)}}}/>
+          )
+        }
+      </div>
+    </div>;
   }
 
   return loaded ? (
@@ -288,6 +337,10 @@ function App() {
         </div>
 
         <div className="w-10/12 mt-5 justify-center items-center">
+          <label className='justify-center text-xl'>
+            Video Section:
+          </label>
+
           <div className="w-full">
             <Slider
               getAriaLabel={() => 'Minimum distance'}
@@ -313,6 +366,10 @@ function App() {
         </div>
         
         <div className="w-10/12 mt-5 justify-center items-center">
+          <label className='justify-center text-xl'>
+            Gif Min and Max Length:
+          </label>
+          
           <div className="w-full">
             <Slider
               getAriaLabel={() => 'Minimum distance'}
