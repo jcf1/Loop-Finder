@@ -4,6 +4,18 @@ import imagehash
 from PIL import Image
 from datetime import timedelta, datetime
 from moviepy.editor import VideoFileClip
+from multiprocessing import Pool, Array
+from datetime import datetime
+
+def find_valid_pairs(cpa,cpb,s_cpa,s_cpb,threshold,hash_size):
+    hd = sum(np.bitwise_xor(
+            np.unpackbits(np.ndarray(s_cpa)), 
+            np.unpackbits(np.ndarray(s_cpb))
+    ))
+    similarity = (hash_size**2 - hd) / hash_size**2
+    if similarity > threshold:
+        return tuple([cpa, cpb, similarity])
+    return None
 
 class loopFinder:
     def __init__(self, clip, minLen, maxLen, threshold, eval):
@@ -77,34 +89,41 @@ class loopFinder:
                     hash_buckets_list[i][signature_band_bytes] = list()
                 hash_buckets_list[i][signature_band_bytes].append(fh)
         
+        # Check candidate pairs for similarity
+        now = datetime.now()
+        count = 0
+        
         candidate_pairs = set()
+        tested = set()
         for hash_buckets in hash_buckets_list:
             for hash_bucket in hash_buckets.values():
                 if len(hash_bucket) > 1:
                     hash_bucket = sorted(hash_bucket)
                     for i in range(len(hash_bucket)):
                         for j in range(i+1, len(hash_bucket)):
-                            candidate_pairs.add(tuple([hash_bucket[i],hash_bucket[j]]))
+                            cpa = hash_bucket[i]
+                            cpb = hash_bucket[j]
+                            tup = tuple([cpa,cpb])
+                            if not tup in tested and self.is_valid(cpa,cpb):
+                                candidate_pairs.add(tup)
+                            tested.add(tup)
+        print('IS VALID:',datetime.now() - now)
 
-        # Check candidate pairs for similarity
+        print(len(candidate_pairs))
         near_duplicates = list()
         for cpa, cpb in candidate_pairs:
+            count += 1
             hd = sum(np.bitwise_xor(
                     np.unpackbits(signatures[cpa]), 
                     np.unpackbits(signatures[cpb])
             ))
             similarity = (hash_size**2 - hd) / hash_size**2
-            if similarity > threshold and self.is_valid(cpa, cpb):
-                ff = np.unpackbits(signatures[cpa])
-                for idx in range(fd_to_idx[cpa]+1,fd_to_idx[cpb]):
-                    hd = sum(np.bitwise_xor(
-                        ff, 
-                        np.unpackbits(signatures[frame_list[idx]])
-                    ))
-                    if ((hash_size**2 - hd) / hash_size**2) < 0.9:
-                        near_duplicates.append((cpa, cpb, similarity))
-                        break
+            if similarity > threshold:
+                near_duplicates.append((cpa, cpb, similarity))
                 
+        print(count)
+        print('Check Candidate Pairs:',datetime.now() - now)
+        
         # Sort near-duplicates by descending similarity and return
         if self.eval == 'quality':
             near_duplicates.sort(key=lambda x: x[2], reverse=True)
@@ -143,8 +162,23 @@ class loopFinder:
         return final_sims
 
     def process_clip(self):
+        start = datetime.now()
         frames = self.create_frames()
+        now = datetime.now()
+        print('Frames:',now - start)
+
         signatures, fd_to_idx, frame_list = self.calculate_signatures(frames)
+        print('Signatures',datetime.now() - now)
+        now = datetime.now()
+
         sims = self.find_similarity(signatures, fd_to_idx, frame_list)
+        print('Similarity:',datetime.now() - now)
+        now = datetime.now()
+
         final_sims = self.prune_candidates(sims)
+        print('Prune:',datetime.now() - now)
+        now = datetime.now()
+
+        print('TOTAL:',now-start)
+
         return final_sims
