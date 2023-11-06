@@ -7,24 +7,17 @@ from moviepy.editor import VideoFileClip
 from multiprocessing import Pool, Array
 from datetime import datetime
 
-def find_valid_pairs(cpa,cpb,s_cpa,s_cpb,threshold,hash_size):
-    hd = sum(np.bitwise_xor(
-            np.unpackbits(np.ndarray(s_cpa)), 
-            np.unpackbits(np.ndarray(s_cpb))
-    ))
-    similarity = (hash_size**2 - hd) / hash_size**2
-    if similarity > threshold:
-        return tuple([cpa, cpb, similarity])
-    return None
+def bin_sum(tup):
+    return (tup[0],tup[1],sum(tup[2]))
 
 class loopFinder:
     def __init__(self, clip, minLen, maxLen, threshold, eval):
         self.clip = clip
-        self.frames = 30
+        self.frames = 60
         self.minLen = minLen
         self.maxLen = maxLen
-        self.hashSize = 32
-        self.bands = 32
+        self.hashSize = 64
+        self.bands = 64
         self.threshold = threshold
         self.eval = eval
 
@@ -64,6 +57,8 @@ class loopFinder:
         frame_list = list()
         for i, (fd, frame) in enumerate(frames.items()):
             f = frame.convert("L").resize((hashSize+1,hashSize),Image.ANTIALIAS)
+            #dhash = imagehash.dhash(f,hashSize)
+            #f = frame
             dhash = imagehash.dhash(f,hashSize)
             signature = dhash.hash.flatten()
             signatures[fd] = np.packbits(signature)
@@ -93,8 +88,8 @@ class loopFinder:
         now = datetime.now()
         count = 0
         
-        candidate_pairs = set()
-        tested = set()
+        candidate_pairs_2 = set()
+        found = set()
         for hash_buckets in hash_buckets_list:
             for hash_bucket in hash_buckets.values():
                 if len(hash_bucket) > 1:
@@ -104,23 +99,48 @@ class loopFinder:
                             cpa = hash_bucket[i]
                             cpb = hash_bucket[j]
                             tup = tuple([cpa,cpb])
-                            if not tup in tested and self.is_valid(cpa,cpb):
-                                candidate_pairs.add(tup)
-                            tested.add(tup)
-        print('IS VALID:',datetime.now() - now)
+                            if not tup in found:
+                                if self.is_valid(cpa,cpb):
+                                    count+=1
+                                    candidate_pairs_2.add(tup)
+                                found.add(tup)
+        print('Generating Pairs:',datetime.now() - now)
+        now2 = datetime.now()
 
-        print(len(candidate_pairs))
+        candidate_pairs_3 = list()
+        for cpa, cpb in candidate_pairs_2:
+            xor = np.bitwise_xor(np.unpackbits(signatures[cpa]),
+                                  np.unpackbits(signatures[cpb]))
+            candidate_pairs_3.append((cpa,cpb,xor))
+        print('Unpack and XOR:',datetime.now() - now2)
+        now2 = datetime.now()
+
+        '''
+        candidate_pairs_4 = list()
+        for cpa, cpb, xor in candidate_pairs_3:
+            hd = sum(xor)
+            candidate_pairs_4.append((cpa,cpb,hd))
+        print('SUM:',datetime.now() - now2)
+        now2 = datetime.now()
+        '''
+
+        with Pool() as pool:
+            candidate_pairs_4 = pool.map(bin_sum, candidate_pairs_3)
+            #candidate_pairs_4 = pool.map(lambda x: (x[0],x[1],sum(x[2])),candidate_pairs_3)
+            pool.close()
+            pool.join()
+        print('SUM:',datetime.now() - now2)
+        now2 = datetime.now()
+
         near_duplicates = list()
-        for cpa, cpb in candidate_pairs:
-            count += 1
-            hd = sum(np.bitwise_xor(
-                    np.unpackbits(signatures[cpa]), 
-                    np.unpackbits(signatures[cpb])
-            ))
-            similarity = (hash_size**2 - hd) / hash_size**2
-            if similarity > threshold:
+        _hash_size = hash_size**2
+        for cpa, cpb, hd in candidate_pairs_4:
+            similarity = (_hash_size - hd) / _hash_size
+            if similarity >= threshold:
                 near_duplicates.append((cpa, cpb, similarity))
-                
+        print('Similarity:',datetime.now() - now2)
+        now2 = datetime.now()
+
         print(count)
         print('Check Candidate Pairs:',datetime.now() - now)
         
@@ -133,13 +153,14 @@ class loopFinder:
                 end_obj   = datetime.strptime(cpb, '%H-%M-%S.%f')
                 return end_obj - start_obj
             near_duplicates.sort(key=lambda x: calc_length(x[0], x[1]), reverse=True)
+        #print(near_duplicates)
         return near_duplicates
 
     def prune_candidates(self, sims):
         def sort_candidates(x):
             return x[2], datetime.strptime(x[1], '%H-%M-%S.%f') - datetime.strptime(x[0], '%H-%M-%S.%f')
         
-        sims.sort(key=sort_candidates, reverse=True)
+        #sims.sort(key=sort_candidates, reverse=True)
         segments = list()
         final_sims = list()
         for s in sims:
@@ -161,6 +182,22 @@ class loopFinder:
         
         return final_sims
 
+    def video_to_gifs(self, gif_folder, frames, final_sims):
+        full_video = self.clip
+        for i,s in enumerate(final_sims):
+            
+            try:
+                frame1 = frames[self.format_timedelta(timedelta(seconds=s[0]))]
+                frame1.save(gif_folder + '/' + str(s[0]).replace('.','-')+'.png')
+                frame2 = frames[self.format_timedelta(timedelta(seconds=s[0] + s[1]))]
+                frame2.save(gif_folder + '/' + str(s[0] + s[1]).replace('.','-')+'.png')
+            except:
+                print(self.format_timedelta(timedelta(seconds=s[0])))
+                print(self.format_timedelta(timedelta(seconds=s[0] + s[1])))
+
+            clip = full_video.subclip(s[0],s[0] + s[1])
+            clip.write_gif(gif_folder + '/' + str(s[0]).replace('.','-')+'-'+str(s[0] + s[1]).replace('.','-')+".gif")
+
     def process_clip(self):
         start = datetime.now()
         frames = self.create_frames()
@@ -172,7 +209,7 @@ class loopFinder:
         now = datetime.now()
 
         sims = self.find_similarity(signatures, fd_to_idx, frame_list)
-        print('Similarity:',datetime.now() - now)
+        print('Find Similarity:',datetime.now() - now)
         now = datetime.now()
 
         final_sims = self.prune_candidates(sims)
@@ -180,5 +217,7 @@ class loopFinder:
         now = datetime.now()
 
         print('TOTAL:',now-start)
+
+        print(final_sims)
 
         return final_sims
