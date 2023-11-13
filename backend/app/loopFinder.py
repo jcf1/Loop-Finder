@@ -4,15 +4,20 @@ import imagehash
 from PIL import Image
 from datetime import timedelta, datetime
 from moviepy.editor import VideoFileClip
+from multiprocessing import Pool, Array
+from datetime import datetime
+
+def bin_sum(tup):
+    return (tup[0],tup[1],sum(tup[2]))
 
 class loopFinder:
     def __init__(self, clip, minLen, maxLen, threshold, eval):
         self.clip = clip
-        self.frames = 30
+        self.frames = 100
         self.minLen = minLen
         self.maxLen = maxLen
-        self.hashSize = 32
-        self.bands = 32
+        self.hashSize = 64
+        self.bands = 64
         self.threshold = threshold
         self.eval = eval
 
@@ -77,34 +82,43 @@ class loopFinder:
                     hash_buckets_list[i][signature_band_bytes] = list()
                 hash_buckets_list[i][signature_band_bytes].append(fh)
         
+        # Check candidate pairs for similarity
         candidate_pairs = set()
+        found = set()
         for hash_buckets in hash_buckets_list:
             for hash_bucket in hash_buckets.values():
                 if len(hash_bucket) > 1:
                     hash_bucket = sorted(hash_bucket)
                     for i in range(len(hash_bucket)):
                         for j in range(i+1, len(hash_bucket)):
-                            candidate_pairs.add(tuple([hash_bucket[i],hash_bucket[j]]))
+                            cpa = hash_bucket[i]
+                            cpb = hash_bucket[j]
+                            tup = tuple([cpa,cpb])
+                            if not tup in found:
+                                if self.is_valid(cpa,cpb):
+                                    candidate_pairs.add(tup)
+                                found.add(tup)
 
-        # Check candidate pairs for similarity
-        near_duplicates = list()
+        candidate_pairs_xor = list()
         for cpa, cpb in candidate_pairs:
-            hd = sum(np.bitwise_xor(
-                    np.unpackbits(signatures[cpa]), 
-                    np.unpackbits(signatures[cpb])
-            ))
-            similarity = (hash_size**2 - hd) / hash_size**2
-            if similarity > threshold and self.is_valid(cpa, cpb):
-                ff = np.unpackbits(signatures[cpa])
-                for idx in range(fd_to_idx[cpa]+1,fd_to_idx[cpb]):
-                    hd = sum(np.bitwise_xor(
-                        ff, 
-                        np.unpackbits(signatures[frame_list[idx]])
-                    ))
-                    if ((hash_size**2 - hd) / hash_size**2) < 0.9:
-                        near_duplicates.append((cpa, cpb, similarity))
-                        break
-                
+            xor = np.bitwise_xor(np.unpackbits(signatures[cpa]),
+                                  np.unpackbits(signatures[cpb]))
+            candidate_pairs_xor.append((cpa,cpb,xor))
+
+        # Use mutithresding to speed up array summations
+        with Pool() as pool:
+            candidate_pairs_sum = pool.map(bin_sum, candidate_pairs_xor)
+            pool.close()
+            pool.join()
+
+        #Keep pairs that score above threshold score
+        near_duplicates = list()
+        _hash_size = hash_size**2
+        for cpa, cpb, hd in candidate_pairs_sum:
+            similarity = (_hash_size - hd) / _hash_size
+            if similarity >= threshold:
+                near_duplicates.append((cpa, cpb, similarity))
+
         # Sort near-duplicates by descending similarity and return
         if self.eval == 'quality':
             near_duplicates.sort(key=lambda x: x[2], reverse=True)
@@ -120,13 +134,13 @@ class loopFinder:
         def sort_candidates(x):
             return x[2], datetime.strptime(x[1], '%H-%M-%S.%f') - datetime.strptime(x[0], '%H-%M-%S.%f')
         
-        sims.sort(key=sort_candidates, reverse=True)
         segments = list()
         final_sims = list()
         for s in sims:
             seg_start = datetime.strptime(s[0], '%H-%M-%S.%f')
             seg_end = datetime.strptime(s[1], '%H-%M-%S.%f')
 
+            #Don't include results that have any overlap with another gif
             valid = True
             for seg in segments:
                 if (seg_start >= seg[0] and seg_start <= seg[1]) or \
@@ -138,8 +152,8 @@ class loopFinder:
                 segments.append((seg_start,seg_end))
                 delta = seg_end - seg_start
                 final_sims.append((float(f'{seg_start.second}.{seg_start.microsecond}'), 
-                    float(f'{delta.seconds}.{delta.microseconds}')))
-        
+                    float(f'{delta.seconds}.{delta.microseconds}'),
+                    s[2]))
         return final_sims
 
     def process_clip(self):

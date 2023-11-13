@@ -22,7 +22,7 @@ app.add_middleware(
 
 @app.get("/", tags=["root"])
 async def read_root() -> dict:
-    return {"message": "This is a placeholder. DO NOT FORGET TO CHANGE!!!"}
+    return {"message": "departed john tweak a maniacal share damp dinner peripheral."}
 
 @app.post("/uploadfile")
 async def create_upload_file(

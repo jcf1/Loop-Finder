@@ -10,26 +10,37 @@ import { BiDownload } from "react-icons/bi";
 import './App.css';
 
 function App() {
-  const minDistance = 1;
-  const maxDistance = 60;
+
+  //Video Selection
+  const minDuration = 1;
+  const maxDuration = 60;
+
+  //Gif Settings
+  const minLength = 0.5;
+  const maxLength = 15;
+  const lengthStep = 0.5;
+  const minThreshold = 0.75;
+  const maxThreshold = 1.0;
   
   const perPage = 5;
 
   const [loaded, setLoaded] = useState(false);
-
   const [running, setRun] = useState(false);
+  const [ran, setRan] = useState(false);
+  const [error,setError] = useState(false);
   
   const [url, setUrl] = useState('');
   const [durationRange, setDurationRange] = useState([0,0]);
-  const [lengthRange, setLengthRange] = useState([0.5,10]);
+  const [lengthRange, setLengthRange] = useState([0.5,5]);
   const [duration, setDuration] = useState(0);
-  const [threshold, setThreshold] = useState(0.95);
+  const [threshold, setThreshold] = useState(0.90);
   const [evaluation, setEvaluation] = useState("quality");
 
   const [page, setPage] = useState(1);
   const [ranges, setRanges] = useState([]);
   const [sTime, setSTime] = useState(0.0);
   const [gifs, setGifs] = useState<File[]>([]);
+  const [gifInfo, setGifInfo] = useState<string[][]>([]);
   const [loadGifs, setLoadGifs] = useState(false);
 
   const playerRef = useRef<ReactPlayer>(null);
@@ -37,10 +48,44 @@ function App() {
   const ffmpegRef = useRef<FFmpeg>(new FFmpeg());
   const messageRef = useRef<HTMLParagraphElement | null>(null);
 
+  //Initial load
   useEffect(() => {
     load();
   }, []);
+
+  //When results page changes
+  useEffect(() => {
+    if(ranges.length > 0 && !loadGifs) {
+      setLoadGifs(true);
+      setGifs([]);
+      createGifs().then((result) => {
+        setGifs(result[0]);
+        setGifInfo(result[1]);
+        setLoadGifs(false);
+      });
+    }
+  }, [page,ranges]);
+
+  //Time to string functions
+  const timeStr = (seconds: number) => {
+    let minutes = seconds / 60;
+    let hours = Math.floor(minutes / 60);
+    minutes = Math.floor(minutes % 60);
+    seconds = Math.floor(seconds % 60);
+    return String(hours) + ":" + String(minutes).padStart(2,'0') + ":" + String(seconds).padStart(2,'0');
+  }
+
+  const fullTimeStr = (seconds: number, sep: string) => {
+    let milli = Math.round((seconds % 1) * 100);
+    seconds = Math.floor(seconds);
+    let minutes = seconds / 60;
+    let hours = Math.floor(minutes / 60);
+    minutes = Math.floor(minutes % 60);
+    seconds = Math.floor(seconds % 60);
+    return String(hours) + sep + String(minutes).padStart(2,'0') + sep + String(seconds).padStart(2,'0') + "." + String(milli).padStart(2,'0');
+  }
   
+  //Load in ffmpeg
   const load = async () => {
     const baseURL = "https://unpkg.com/@ffmpeg/core-mt@0.12.2/dist/esm";
     const ffmpeg = ffmpegRef.current;
@@ -60,20 +105,14 @@ function App() {
     });
     setLoaded(true);
   };
-  
-  const timeStr = (seconds: number) => {
-    let minutes = seconds / 60;
-    let hours = Math.floor(minutes / 60);
-    minutes = Math.floor(minutes % 60);
-    seconds = Math.floor(seconds % 60);
-    return String(hours) + ":" + String(minutes).padStart(2,'0') + ":" + String(seconds).padStart(2,'0');
-  }
 
   const submitSegment = async () => {
-    console.log("SUBMIT");
     setRun(true);
+    setError(false);
     setRanges([]);
+    setGifs([]);
     setPage(1);
+    setRan(true);
     const s = durationRange[0];
     setSTime(s);
     const ffmpeg = ffmpegRef.current;
@@ -85,7 +124,6 @@ function App() {
     const file = new File([blob], 'clip.mp4', {
       type: blob.type,
     });
-    console.log("Created Clip");
     if(file === null) {
       return;
     }
@@ -102,56 +140,19 @@ function App() {
         body: formData
       });
       const data = await response.json();
-
-      console.log(response);
-      console.log(data);
-
-
       if(response.ok) {
-        console.log("File uploaded successfully");
         setRanges(data.gifs);
-        //createGifs(data.gifs, s);
       }
       setRun(false);
     } catch(error) {
-      console.log(error);
+      setError(true);
       setRun(false);
     }
   }
 
-  const fileTimeStr = (seconds: number) => {
-    let milli = seconds % 1;
-    seconds = Math.floor(seconds);
-    let minutes = seconds / 60;
-    let hours = Math.floor(minutes / 60);
-    minutes = Math.floor(minutes % 60);
-    seconds = Math.floor(seconds % 60);
-    return String(hours) + "." + String(minutes).padStart(2,'0') + "." + String(seconds).padStart(2,'0') + "." + String(milli.toFixed(2)).padStart(2,'0');
-  }
-
-  const createGifs = async () => {
-    const ffmpeg = ffmpegRef.current;
-    let _gifs = [];
-
-    let sIdx = (page - 1) * perPage;
-    let eIdx = page * perPage;
-    eIdx = eIdx > ranges.length ? ranges.length : eIdx;
-
-    for(let i = sIdx; i < eIdx; i++) {
-      let ss = timeStr(sTime + ranges[i][0]);
-      let t = ranges[i][1];
-      let fname = fileTimeStr(sTime + ranges[i][0])+'_'+fileTimeStr(sTime + ranges[i][0]+ ranges[i][1])+'.gif';
-
-      await ffmpeg.exec(['-ss', ss, '-t', String(t), '-i', 'input.mp4', fname]);
-      const data = await ffmpeg.readFile(fname);
-      const blob = new Blob([data], {"type" : "image\/gif"})
-      const file = new File([blob], fname, {
-        type: blob.type,
-      });
-      _gifs.push(file);
-    }
-    return _gifs;
-  }
+  /*
+  * ================ Handle Video Input ================
+  */
 
   const uploadFile = async (_url: string) => {
     const ffmpeg = ffmpegRef.current;
@@ -187,21 +188,21 @@ function App() {
     }
 
     let minRange = 0;
-    if (newValue[1] - newValue[0] > maxDistance) {
+    if (newValue[1] - newValue[0] > maxDuration) {
       if (activeThumb === 0) {
         minRange = newValue[0];
-        setDurationRange([minRange, Math.min(newValue[1], newValue[0] + maxDistance)]);
+        setDurationRange([minRange, Math.min(newValue[1], newValue[0] + maxDuration)]);
       } else {
-        minRange = Math.max(newValue[0], newValue[1] - maxDistance);
+        minRange = Math.max(newValue[0], newValue[1] - maxDuration);
         setDurationRange([minRange, newValue[1]]);
       }
-    } else if (newValue[1] - newValue[0] < minDistance) {
+    } else if (newValue[1] - newValue[0] < minDuration) {
       if (activeThumb === 0) {
-        minRange = Math.min(newValue[0], duration - minDistance);
-        setDurationRange([minRange, minRange + minDistance]);
+        minRange = Math.min(newValue[0], duration - minDuration);
+        setDurationRange([minRange, minRange + minDuration]);
       } else {
-        const clamped = Math.max(newValue[1], minDistance);
-        minRange = clamped - minDistance;
+        const clamped = Math.max(newValue[1], minDuration);
+        minRange = clamped - minDuration;
         setDurationRange([minRange, clamped]);
       }
     } else {
@@ -210,7 +211,9 @@ function App() {
     }
     playerRef.current?.seekTo(minRange / duration);
   };
+  //====================================================
 
+  //Handle Gif length input
   const handleLengthChange = (
     event: Event,
     newValue: number | number[],
@@ -221,15 +224,13 @@ function App() {
     }
 
     let minRange = 0.5;
-    let minDist = 0.5;
-    let maxDist = 60;
-    if (newValue[1] - newValue[0] < minDist) {
+    if (newValue[1] - newValue[0] < minLength) {
       if (activeThumb === 0) {
-        minRange = Math.min(newValue[0], maxDist - minDist);
-        setLengthRange([minRange, minRange + minDist]);
+        minRange = Math.min(newValue[0], maxLength - lengthStep);
+        setLengthRange([minRange, minRange + minLength]);
       } else {
-        const clamped = Math.max(newValue[1], minRange + minDist);
-        minRange = clamped - minDist;
+        const clamped = Math.max(newValue[1], minRange + minLength);
+        minRange = clamped - minLength;
         setLengthRange([minRange, clamped]);
       }
     } else {
@@ -238,16 +239,38 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    if(ranges.length > 0 && !loadGifs) {
-      setLoadGifs(true);
-      setGifs([]);
-      createGifs().then((result) => {
-        setGifs(result);
-        setLoadGifs(false);
+  /*
+  * ================ Generate and Display Results ================
+  */
+
+  const createGifs = async (): Promise<[File[], string[][]]> => {
+    const ffmpeg = ffmpegRef.current;
+    let _gifs = [];
+    let _gifs_info = [];
+
+    let sIdx = (page - 1) * perPage;
+    let eIdx = page * perPage;
+    eIdx = eIdx > ranges.length ? ranges.length : eIdx;
+
+    for(let i = sIdx; i < eIdx; i++) {
+      let ss = timeStr(sTime + ranges[i][0]);
+      let t = ranges[i][1];
+      let fname = fullTimeStr(sTime + ranges[i][0], ".")+'_'+fullTimeStr(sTime + ranges[i][0]+ ranges[i][1], ".")+'.gif';
+
+      await ffmpeg.exec(['-ss', ss, '-t', String(t), '-i', 'input.mp4', fname]);
+      const data = await ffmpeg.readFile(fname);
+      const blob = new Blob([data], {"type" : "image\/gif"})
+      const file = new File([blob], fname, {
+        type: blob.type,
       });
+      _gifs.push(file);
+      _gifs_info.push([fullTimeStr(sTime + ranges[i][0], ":"),
+                      fullTimeStr(sTime + ranges[i][0]+ ranges[i][1], ":"),
+                      fullTimeStr(ranges[i][1], ":"),
+                      ranges[i][2]]);
     }
-  }, [page,ranges]);
+    return [_gifs, _gifs_info];
+  }
 
   const createGifList = () => {
     if(running) {
@@ -258,19 +281,39 @@ function App() {
       );
     }
 
-    if(ranges.length == 0) {
+    if(error) {
+      return (
+        <div className='h-full w-full flex items-center justify-center text-center text-3xl text-slate-900'>
+          An error occured while processing your request. Please try again.
+        </div>
+      );
+    } else if(ranges.length == 0 && !ran) {
       return;
     }
 
+    let pages = ranges.length == 0 ? 1 : Math.ceil(ranges.length / perPage);
+
     return <div className='h-full w-full'>
       <ul className='h-[95vh] w-[40vw]'>
-        { gifs.length > 0 ?
+        { ranges.length == 0 ?
+          (
+            <div className='h-full w-full flex items-center justify-center text-5xl text-slate-900'>
+              No Results Found
+            </div>
+          ) : gifs.length > 0 ?
             (gifs.map((item, idx) => {
               return (
-                <li className={'h-[19vh] w-[40vw] ' + (((idx % 2) === 0) ? 'bg-slate-400' : 'bg-slate-600')} key={item.name}>
+                <li className={'h-[19vh] w-[40vw] ' + (((idx % 2) === 0) ? 'bg-slate-600' : 'bg-slate-400')} key={item.name}>
                   <div className='h-full w-full flex justify-between'>
-                    <img className='h-[18wh] w-[32vh] mt-auto mb-auto ml-2' src={URL.createObjectURL(item)}/>
-                    <div className='mt-auto mb-auto text-l'>{item.name}</div>
+                    <div className='flex justify-center items-center h-[18vh] w-[32vh] mt-auto mb-auto ml-2'>
+                      <img className='max-h-[18vh] max-w-[32vh] mt-auto mb-auto' src={URL.createObjectURL(item)}/>
+                    </div>
+                    <div className={'mt-auto mb-auto text-xl ' + (((idx % 2) === 0) ? 'text-slate-300' : 'text-slate-900')}>
+                      <div>Score: {parseFloat(gifInfo[idx][3]).toFixed(4)}</div>
+                      <div>Length: {gifInfo[idx][2]}</div>
+                      <div>Start: {gifInfo[idx][0]}</div>
+                      <div>End:   {gifInfo[idx][1]}</div>
+                    </div>
                     <a className='mt-auto mb-auto' href={URL.createObjectURL(item)} download={item.name} target='_blank'>
                       <button className='h-[4rem] w-[6rem] mt-auto mb-auto mr-2 text-xxl'>
                         <IconContext.Provider value={{color: "white", size: "40"}}>
@@ -294,10 +337,12 @@ function App() {
             <input className="table-cell w-[15vw] h-full bg-slate-200" type="button" value="Previous Page" disabled={page == 1} onClick={(e) => {if(!loadGifs){setPage(page - 1)}}}/>
           )
         }
-        <div className="table-cell w-[10vw] h-full text-xl bg-slate-400">
-          Page {page} of {Math.ceil(ranges.length / perPage)}
+        <div className={"place-items-center w-[10vw] h-full items-center text-xl bg-slate-400 " + ((ranges.length == 0) ? "grid" : "table-cell")} >
+          <div>
+            Page {page} of {pages}
+          </div>
         </div>
-        { page == Math.ceil(ranges.length / perPage) ? (
+        { page == pages ? (
             <div className="table-cell w-[15vw] h-full"/>
           ) : (
             <input className="table-cell w-[15vw] h-full bg-slate-200" type="button" value="Next Page" disabled={page == Math.ceil(ranges.length / perPage)} onClick={(e) => {if(!loadGifs){setPage(page + 1)}}}/>
@@ -306,12 +351,13 @@ function App() {
       </div>
     </div>;
   }
+  //============================================================
 
   return loaded ? (
     <div className="justify-center justify-items-center h-screen w-full overscroll-none">
       
       <div className="grid float-left justify-center justify-items-center align-middle w-3/5 h-full bg-slate-300">
-        <div className="flex w-[40vw] h-[22.5vw] mt-10 justify-center items-center">
+        <div className="flex w-[40vw] h-[22.5vw] mt-10 justify-center items-center bg-black">
           {url ?
             <ReactPlayer
               ref={playerRef}
@@ -324,15 +370,15 @@ function App() {
               onProgress={handleProgress}
             />
             :
-            <div className='w-full h-full bg-black'/>
+            <div className='w-full h-full'/>
           }
         </div>
 
-        <div className="flex-row w-4/5 h-1/6 text-center">
+        <div className="flex-row w-full h-1/6 text-center">
           <div className="table w-full">
             <input className="invisible w-0 h-0" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileSelect(e)}/>
-            <input className="table-cell w-1/3 mr-4 h-auto text-white bg-blue-600" type="button" value="Browse..." disabled={running} onClick={() => uploadRef.current?.click()}/>
-            <input className="table-cell w-1/3 ml-4 h-auto text-white bg-green-500" type="button" value="Submit" disabled={running || url == ''} onClick={submitSegment}/>
+            <input className="table-cell w-1/3 h-[4vh] mr-20 text-white bg-blue-600" type="button" value="Upload" disabled={running} onClick={() => uploadRef.current?.click()}/>
+            <input className="table-cell w-1/3 h-[4vh] ml-20 text-white bg-green-600" type="button" value="Submit" disabled={running || url == ''} onClick={submitSegment}/>
           </div>
         </div>
 
@@ -349,7 +395,7 @@ function App() {
               max={duration}
               step={1}
               onChange={handleDurationChange}
-              valueLabelDisplay="auto"
+              valueLabelDisplay="off"
               disabled={running}
               disableSwap
             />
@@ -374,11 +420,11 @@ function App() {
             <Slider
               getAriaLabel={() => 'Minimum distance'}
               value={lengthRange}
-              min={0.5}
-              max={60}
-              step={0.5}
+              min={minLength}
+              max={maxLength}
+              step={lengthStep}
               onChange={handleLengthChange}
-              valueLabelDisplay="auto"
+              valueLabelDisplay="off"
               disabled={running}
               disableSwap
             />
@@ -396,21 +442,25 @@ function App() {
 
         <div className="table justify-center text-xl pt-4">
           <div className="table-cell pr-2">
-            Threshold set to {threshold}:
+            Threshold score: {(Math.round(threshold * 100) / 100).toFixed(2)}:
           </div>
-          <input className="table-cell border" type="range" max={1} min={0.85} step={0.01} value={threshold} disabled={running} onChange={(e) => setThreshold(parseFloat(e.target.value))}/>
+          <input className="table-cell border" type="range" max={maxThreshold} min={minThreshold} step={0.01} value={threshold} disabled={running} onChange={(e) => setThreshold(parseFloat(e.target.value))}/>
         </div>
 
         <div className="table justify-center text-xl pt-4">
           <div className="table-cell pr-8">Create matches based on:</div>
             <label className="table-cell pr-8">
               <input className="border mr-2" type="radio" value={"quality"} checked={evaluation=="quality"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
-              Prioritize Better Looping Gifs
+              Highest Score
             </label>
             <label className="table-cell pr-8">
               <input className="border mr-2" type="radio" value={"length"} checked={evaluation=="length"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
-              Prioritize Long Gifs
+              Longest
             </label>
+        </div>
+
+        <div className="absolute bottom-0.5 w-full text-center text-sm text-slate-600">
+          Made by John Freeman. <a className='underline text-blue-600' href="mailto:jcf1dev@gmail.com">Contact me</a> or <a className='underline text-blue-600' href="https://jcf1.github.io/" rel="external nofollow noopener" target='_blank'>visit my website</a>.
         </div>
       </div>
         
