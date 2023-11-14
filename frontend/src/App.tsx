@@ -356,111 +356,115 @@ function App() {
   return loaded ? (
     <div className="justify-center justify-items-center h-screen w-full overscroll-none">
       
-      <div className="grid float-left justify-center justify-items-center align-middle w-3/5 h-full bg-slate-300">
-        <div className="flex w-[40vw] h-[22.5vw] mt-10 justify-center items-center bg-black">
-          {url ?
-            <ReactPlayer
-              ref={playerRef}
-              width='100%'
-              height='100%'
-              playing={true}
-              muted={true}
-              onDuration={handleDuration}
-              url={url}
-              onProgress={handleProgress}
-            />
-            :
-            <div className='w-full h-full'/>
-          }
-        </div>
-
-        <div className="flex-row w-full h-1/6 text-center">
-          <div className="table w-full">
-            <input className="invisible w-0 h-0" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileSelect(e)}/>
-            <input className="table-cell w-1/3 h-[4vh] mr-20 text-white bg-blue-600" type="button" value="Upload" disabled={running} onClick={() => uploadRef.current?.click()}/>
-            <input className="table-cell w-1/3 h-[4vh] ml-20 text-white bg-green-600" type="button" value="Submit" disabled={running || url == ''} onClick={submitSegment}/>
-          </div>
-        </div>
-
-        <div className="w-10/12 mt-5 justify-center items-center">
-          <label className='justify-center text-xl'>
-            Video Section:
-          </label>
-
-          <div className="w-full">
-            <Slider
-              getAriaLabel={() => 'Minimum distance'}
-              value={durationRange}
-              min={0}
-              max={duration}
-              step={1}
-              onChange={handleDurationChange}
-              valueLabelDisplay="off"
-              disabled={running}
-              disableSwap
-            />
+      <div className="grid w-3/5 h-full float-left justify-center justify-items-center align-middle bg-slate-300">
+        <div className="grid w-full h-[95vh] float-left justify-center justify-items-center align-middle overflow-scroll">
+          <div className="flex w-[40vw] h-[22.5vw] mt-10 justify-center items-center bg-black">
+            {url ?
+              <ReactPlayer
+                ref={playerRef}
+                width='100%'
+                height='100%'
+                playing={true}
+                muted={true}
+                onDuration={handleDuration}
+                url={url}
+                onProgress={handleProgress}
+              />
+              :
+              <div className='w-full h-full'/>
+            }
           </div>
 
-          <div className="flex justify-between">
-            <div className='text-2xl'>
-              {timeStr(durationRange[0])}
-            </div>
-            <div className='text-2xl'>
-              {timeStr(durationRange[1])}
+          <div className="flex-row w-full h-1/6 text-center">
+            <div className="table w-full">
+              <input className="invisible w-0 h-0" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileSelect(e)}/>
+              <input className="table-cell w-1/3 h-[4vh] mr-20 text-white bg-blue-600" type="button" value="Upload" disabled={running} onClick={() => uploadRef.current?.click()}/>
+              <input className="table-cell w-1/3 h-[4vh] ml-20 text-white bg-green-600" type="button" value="Submit" disabled={running || url == ''} onClick={submitSegment}/>
             </div>
           </div>
-        </div>
-        
-        <div className="w-10/12 mt-5 justify-center items-center">
-          <label className='justify-center text-xl'>
-            Gif Min and Max Length:
-          </label>
+
+          <div className="w-10/12 mt-5 justify-center items-center">
+            <label className='justify-center text-xl'>
+              Video Section:
+            </label>
+
+            <div className="w-full">
+              <Slider
+                getAriaLabel={() => 'Minimum distance'}
+                value={durationRange}
+                min={0}
+                max={duration}
+                step={1}
+                onChange={handleDurationChange}
+                valueLabelDisplay="off"
+                disabled={running}
+                disableSwap
+              />
+            </div>
+
+            <div className="flex justify-between">
+              <div className='text-2xl'>
+                {timeStr(durationRange[0])}
+              </div>
+              <div className='text-2xl'>
+                {timeStr(durationRange[1])}
+              </div>
+            </div>
+          </div>
           
-          <div className="w-full">
-            <Slider
-              getAriaLabel={() => 'Minimum distance'}
-              value={lengthRange}
-              min={minLength}
-              max={maxLength}
-              step={lengthStep}
-              onChange={handleLengthChange}
-              valueLabelDisplay="off"
-              disabled={running}
-              disableSwap
-            />
-          </div>
-
-          <div className="flex justify-between">
-            <div className='text-2xl'>
-              {lengthRange[0]}
-            </div>
-            <div className='text-2xl'>
-              {lengthRange[1]}
-            </div>
-          </div>
-        </div>
-
-        <div className="table justify-center text-xl pt-4">
-          <div className="table-cell pr-2">
-            Threshold score: {(Math.round(threshold * 100) / 100).toFixed(2)}:
-          </div>
-          <input className="table-cell border" type="range" max={maxThreshold} min={minThreshold} step={0.01} value={threshold} disabled={running} onChange={(e) => setThreshold(parseFloat(e.target.value))}/>
-        </div>
-
-        <div className="table justify-center text-xl pt-4">
-          <div className="table-cell pr-8">Create matches based on:</div>
-            <label className="table-cell pr-8">
-              <input className="border mr-2" type="radio" value={"quality"} checked={evaluation=="quality"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
-              Highest Score
+          <div className="w-10/12 mt-5 justify-center items-center">
+            <label className='justify-center text-xl'>
+              Gif Min and Max Length:
             </label>
-            <label className="table-cell pr-8">
-              <input className="border mr-2" type="radio" value={"length"} checked={evaluation=="length"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
-              Longest
-            </label>
+            
+            <div className="w-full">
+              <Slider
+                getAriaLabel={() => 'Minimum distance'}
+                value={lengthRange}
+                min={minLength}
+                max={maxLength}
+                step={lengthStep}
+                onChange={handleLengthChange}
+                valueLabelDisplay="off"
+                disabled={running}
+                disableSwap
+              />
+            </div>
+
+            <div className="flex justify-between">
+              <div className='text-2xl'>
+                {lengthRange[0]}
+              </div>
+              <div className='text-2xl'>
+                {lengthRange[1]}
+              </div>
+            </div>
+          </div>
+
+          <div className="table justify-center text-xl pt-4">
+            <div className="table-cell pr-2">
+              Threshold score: {(Math.round(threshold * 100) / 100).toFixed(2)}:
+            </div>
+            <input className="table-cell border" type="range" max={maxThreshold} min={minThreshold} step={0.01} value={threshold} disabled={running} onChange={(e) => setThreshold(parseFloat(e.target.value))}/>
+          </div>
+
+          <div className="table justify-center text-xl pt-4">
+            <div className="table-cell pr-8">Create matches based on:</div>
+              <label className="table-cell pr-8">
+                <input className="border mr-2" type="radio" value={"quality"} checked={evaluation=="quality"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
+                Highest Score
+              </label>
+              <label className="table-cell pr-8">
+                <input className="border mr-2" type="radio" value={"length"} checked={evaluation=="length"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
+                Longest
+              </label>
+          </div>
         </div>
 
-        <div className="absolute bottom-0.5 w-full text-center text-sm text-slate-600">
-          Made by John Freeman. <a className='underline text-blue-600' href="mailto:jcf1dev@gmail.com">Contact me</a> or <a className='underline text-blue-600' href="https://jcf1.github.io/" rel="external nofollow noopener" target='_blank'>visit my website</a>.
+        <div className="grid w-full h-[5vh] place-items-center">
+          <div className="text-sm whitespace-pre text-slate-600">
+            Made by John Freeman. <a className='underline text-blue-600' href="mailto:jcf1dev@gmail.com">Contact me</a> or <a className='underline text-blue-600' href="https://jcf1.github.io/" rel="external nofollow noopener" target='_blank'>visit my website</a>.
+          </div>
         </div>
       </div>
         
