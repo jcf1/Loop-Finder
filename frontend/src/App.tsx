@@ -11,6 +11,8 @@ import './App.css';
 
 function App() {
 
+  const endpoint = "http://0.0.0.0:8000/uploadfile"
+
   //Video Selection
   const minDuration = 1;
   const maxDuration = 60;
@@ -134,7 +136,6 @@ function App() {
     formData.append('threshold', String(threshold));
     formData.append('eval', evaluation);
     try {
-      const endpoint = "http://0.0.0.0:8000/uploadfile";
       const response = await fetch(endpoint, {
         method: "POST",
         body: formData
@@ -378,7 +379,7 @@ function App() {
           <div className="flex-row w-full h-1/6 text-center">
             <div className="table w-full">
               <input className="invisible w-0 h-0" ref={uploadRef} type="file" accept=".mp4" onChange={(e) => fileSelect(e)}/>
-              <input className="table-cell w-1/3 h-[4vh] mr-20 text-white bg-blue-600" type="button" value="Upload" disabled={running} onClick={() => uploadRef.current?.click()}/>
+              <input className="table-cell w-1/3 h-[4vh] mr-20 text-white bg-blue-600" type="button" value="Browse Videos" disabled={running} onClick={() => uploadRef.current?.click()}/>
               <input className="table-cell w-1/3 h-[4vh] ml-20 text-white bg-green-600" type="button" value="Submit" disabled={running || url == ''} onClick={submitSegment}/>
             </div>
           </div>

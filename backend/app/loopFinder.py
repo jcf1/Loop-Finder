@@ -5,7 +5,6 @@ from PIL import Image
 from datetime import timedelta, datetime
 from moviepy.editor import VideoFileClip
 from multiprocessing import Pool, Array
-from datetime import datetime
 
 def bin_sum(tup):
     return (tup[0],tup[1],sum(tup[2]))
@@ -56,7 +55,7 @@ class loopFinder:
         fd_to_idx = dict()
         frame_list = list()
         for i, (fd, frame) in enumerate(frames.items()):
-            f = frame.convert("L").resize((hashSize+1,hashSize),Image.ANTIALIAS)
+            f = frame.convert("L").resize((hashSize+1,hashSize),Image.LANCZOS)
             dhash = imagehash.dhash(f,hashSize)
             signature = dhash.hash.flatten()
             signatures[fd] = np.packbits(signature)
