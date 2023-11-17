@@ -36,31 +36,29 @@ class loopFinder:
         td = end_obj - start_obj
         return td >= timedelta(seconds=self.minLen) and td <= timedelta(seconds=self.maxLen)
 
-    def create_frames(self):
+    def create_signatures(self):
         clip = self.clip
+        hashSize = self.hashSize
         saving_frames_per_second = min(clip.fps, self.frames)
         step = 1 / clip.fps if saving_frames_per_second == 0 else 1 / saving_frames_per_second
-        frames = dict()
+
+        i = 0
+        signatures = dict()
+        fd_to_idx = dict()
+        frame_list = list()
         for current_duration in np.arange(0, clip.duration, step):
             frame_duration_formatted = self.format_timedelta(timedelta(seconds=current_duration))
             frame = clip.get_frame(current_duration)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame = Image.fromarray(frame)
-            frames[frame_duration_formatted] = frame
-        return frames
-
-    def calculate_signatures(self, frames):
-        hashSize = self.hashSize
-        signatures = dict()
-        fd_to_idx = dict()
-        frame_list = list()
-        for i, (fd, frame) in enumerate(frames.items()):
             f = frame.convert("L").resize((hashSize+1,hashSize),Image.LANCZOS)
             dhash = imagehash.dhash(f,hashSize)
             signature = dhash.hash.flatten()
-            signatures[fd] = np.packbits(signature)
-            fd_to_idx[fd] = i
-            frame_list.append(fd)
+
+            signatures[frame_duration_formatted] = np.packbits(signature)
+            fd_to_idx[frame_duration_formatted] = i
+            frame_list.append(frame_duration_formatted)
+            i += 1
         return signatures, fd_to_idx, frame_list
 
     def find_similarity(self, signatures, fd_to_idx, frame_list):
@@ -156,8 +154,7 @@ class loopFinder:
         return final_sims
 
     def process_clip(self):
-        frames = self.create_frames()
-        signatures, fd_to_idx, frame_list = self.calculate_signatures(frames)
+        signatures, fd_to_idx, frame_list = self.create_signatures()
         sims = self.find_similarity(signatures, fd_to_idx, frame_list)
         final_sims = self.prune_candidates(sims)
         return final_sims
