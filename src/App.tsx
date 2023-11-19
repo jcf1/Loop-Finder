@@ -7,11 +7,11 @@ import { toBlobURL, fetchFile } from '@ffmpeg/util';
 import { NewtonsCradle, ThreeBody, Waveform } from '@uiball/loaders'
 import { IconContext } from "react-icons";
 import { BiDownload } from "react-icons/bi";
+// @ts-ignore
+import { Pyodide } from "./pyodide";
 import './App.css';
 
 function App() {
-
-  const endpoint = "http://0.0.0.0:8000/uploadfile"
 
   //Video Selection
   const minDuration = 1;
@@ -25,6 +25,15 @@ function App() {
   const maxThreshold = 1.0;
   
   const perPage = 5;
+
+  const pyodide = Pyodide.getInstance();
+  /*
+  self.clip = clip
+  self.minLen = minLen
+  self.maxLen = maxLen
+  self.threshold = threshold
+  self.eval = eval
+  */
 
   const [loaded, setLoaded] = useState(false);
   const [running, setRun] = useState(false);
@@ -129,26 +138,17 @@ function App() {
     if(file === null) {
       return;
     }
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('minLen', String(lengthRange[0]));
     formData.append('maxLen', String(lengthRange[1]));
     formData.append('threshold', String(threshold));
     formData.append('eval', evaluation);
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        body: formData
-      });
-      const data = await response.json();
-      if(response.ok) {
-        setRanges(data.gifs);
-      }
-      setRun(false);
-    } catch(error) {
-      setError(true);
-      setRun(false);
-    }
+
+    pyodide.run(file,String(lengthRange[0]),String(lengthRange[1]),String(threshold),evaluation)
+
+
   }
 
   /*
