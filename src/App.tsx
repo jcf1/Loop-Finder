@@ -147,8 +147,6 @@ function App() {
     formData.append('eval', evaluation);
 
     pyodide.run(file,String(lengthRange[0]),String(lengthRange[1]),String(threshold),evaluation)
-
-
   }
 
   /*

@@ -146,3 +146,5 @@ def process_clip(clip, minLen, maxLen, threshold, eval):
     sims = find_similarity(signatures, fd_to_idx, frame_list, minLen, maxLen, threshold, eval)
     final_sims = prune_candidates(sims)
     return final_sims
+
+process_clip(clip, minLen, maxLen, threshold, eval)
