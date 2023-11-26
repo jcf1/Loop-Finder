@@ -7,25 +7,23 @@ import os
 
 app = FastAPI()
 
-origins = [
-    "http://localhost:3000",
-    "localhost:3000"
-]
+origins = []
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"]
+
 )
 
 @app.get("/", tags=["root"])
 async def read_root() -> dict:
     return {"message": "departed john tweak a maniacal share damp dinner peripheral."}
 
-@app.post("/uploadfile")
-async def create_upload_file(
+@app.post("/findloop")
+async def find_loop(
     minLen: str = Form(...),
     maxLen: str = Form(...),
     threshold: str = Form(...),

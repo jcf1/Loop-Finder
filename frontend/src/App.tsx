@@ -11,16 +11,16 @@ import './App.css';
 
 function App() {
 
-  const endpoint = "http://0.0.0.0:8000/uploadfile"
+  const endpoint = "https://loopfinder-server-swfjocc4vq-uk.a.run.app/findloop"
 
   //Video Selection
   const minDuration = 1;
-  const maxDuration = 60;
+  const maxDuration = 30;
 
   //Gif Settings
-  const minLength = 0.5;
-  const maxLength = 15;
-  const lengthStep = 0.5;
+  const minLength = 0.25;
+  const maxLength = 10;
+  const lengthStep = 0.25;
   const minThreshold = 0.75;
   const maxThreshold = 1.0;
   
@@ -33,9 +33,9 @@ function App() {
   
   const [url, setUrl] = useState('');
   const [durationRange, setDurationRange] = useState([0,0]);
-  const [lengthRange, setLengthRange] = useState([0.5,5]);
+  const [lengthRange, setLengthRange] = useState([0.25,5]);
   const [duration, setDuration] = useState(0);
-  const [threshold, setThreshold] = useState(0.90);
+  const [threshold, setThreshold] = useState(0.85);
   const [evaluation, setEvaluation] = useState("quality");
 
   const [page, setPage] = useState(1);
@@ -138,7 +138,7 @@ function App() {
     try {
       const response = await fetch(endpoint, {
         method: "POST",
-        body: formData
+        body: formData,
       });
       const data = await response.json();
       if(response.ok) {
@@ -155,17 +155,25 @@ function App() {
   * ================ Handle Video Input ================
   */
 
-  const uploadFile = async (_url: string) => {
-    const ffmpeg = ffmpegRef.current;
-    await ffmpeg.writeFile('input.mp4', await fetchFile(_url));
-  }
-
-  const fileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const fileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if(e.target.files && e.target.files.length > 0) {
       let _url = URL.createObjectURL(e.target.files[0]);
-      uploadFile(_url);
-      setUrl(_url);
+      if(await uploadFile(_url)) {
+        setUrl(_url);
+      }
     }
+  }
+
+  const uploadFile = async (_url: string) => {
+    try {
+      const ffmpeg = ffmpegRef.current;
+      const video = await fetchFile(_url);
+      await ffmpeg.writeFile('input.mp4', video);
+    } catch(error) {
+      alert("There was an issue loading your video file. Please try another one.");
+      return false;
+    }
+    return true;
   }
 
   const handleProgress = (state: OnProgressProps) => {
@@ -224,7 +232,7 @@ function App() {
       return;
     }
 
-    let minRange = 0.5;
+    let minRange = 0.25;
     if (newValue[1] - newValue[0] < minLength) {
       if (activeThumb === 0) {
         minRange = Math.min(newValue[0], maxLength - lengthStep);
