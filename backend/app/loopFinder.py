@@ -4,7 +4,7 @@ import imagehash
 from PIL import Image
 from datetime import timedelta, datetime
 from moviepy.editor import VideoFileClip
-from multiprocessing import Pool, Array
+from multiprocessing import Pool
 
 def bin_sum(tup):
     return (tup[0],tup[1],sum(tup[2]))
@@ -102,7 +102,7 @@ class loopFinder:
                                   np.unpackbits(signatures[cpb]))
             candidate_pairs_xor.append((cpa,cpb,xor))
 
-        # Use mutithresding to speed up array summations
+        # Use multithreading to speed up array summations
         with Pool() as pool:
             candidate_pairs_sum = pool.map(bin_sum, candidate_pairs_xor)
             pool.close()

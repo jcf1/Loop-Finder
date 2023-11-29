@@ -35,7 +35,7 @@ function App() {
   const [durationRange, setDurationRange] = useState([0,0]);
   const [lengthRange, setLengthRange] = useState([0.25,5]);
   const [duration, setDuration] = useState(0);
-  const [threshold, setThreshold] = useState(0.85);
+  const [threshold, setThreshold] = useState(0.75);
   const [evaluation, setEvaluation] = useState("quality");
 
   const [page, setPage] = useState(1);
@@ -89,7 +89,7 @@ function App() {
   
   //Load in ffmpeg
   const load = async () => {
-    const baseURL = "https://unpkg.com/@ffmpeg/core-mt@0.12.2/dist/esm";
+    const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.4/dist/esm";
     const ffmpeg = ffmpegRef.current;
     ffmpeg.on("log", ({ message }) => {
       if (messageRef.current) messageRef.current.innerHTML = message;
@@ -99,11 +99,7 @@ function App() {
       wasmURL: await toBlobURL(
         `${baseURL}/ffmpeg-core.wasm`,
         "application/wasm"
-      ),
-      workerURL: await toBlobURL(
-        `${baseURL}/ffmpeg-core.worker.js`,
-        "text/javascript"
-      ),
+      )
     });
     setLoaded(true);
   };
