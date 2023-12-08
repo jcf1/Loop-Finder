@@ -362,7 +362,7 @@ function App() {
     <div className="justify-center justify-items-center h-screen w-full overscroll-none">
       
       <div className="grid w-3/5 h-full float-left justify-center justify-items-center align-middle bg-slate-300">
-        <div className="grid w-full h-[95vh] float-left justify-center justify-items-center align-middle overflow-scroll">
+        <div className="grid w-full h-[95vh] float-left justify-center justify-items-center align-middle overflow-scroll scrollbar-hide">
           <div className="flex w-[40vw] h-[22.5vw] mt-10 justify-center items-center bg-black">
             {url ?
               <ReactPlayer
@@ -461,7 +461,7 @@ function App() {
               </label>
               <label className="table-cell pr-8">
                 <input className="border mr-2" type="radio" value={"length"} checked={evaluation=="length"} disabled={running} onChange={(e) => setEvaluation(e.target.value)} />
-                Longest
+                Length
               </label>
           </div>
         </div>
