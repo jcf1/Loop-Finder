@@ -11,7 +11,7 @@ import './App.css';
 
 function App() {
 
-  const endpoint = "https://loopfinder-server-swfjocc4vq-uk.a.run.app/findloop"
+  const endpoint = import.meta.env.GOOGLE_CLOUD_SERVER_URL;
 
   //Video Selection
   const minDuration = 1;
@@ -132,7 +132,7 @@ function App() {
     formData.append('threshold', String(threshold));
     formData.append('eval', evaluation);
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${endpoint}/findloop`, {
         method: "POST",
         body: formData,
       });
