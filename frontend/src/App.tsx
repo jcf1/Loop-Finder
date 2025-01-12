@@ -11,7 +11,7 @@ import './App.css';
 
 function App() {
 
-  const endpoint = import.meta.env.GOOGLE_CLOUD_SERVER_URL;
+  const endpoint = 'https://loopfinder-server-swfjocc4vq-uk.a.run.app';
 
   //Video Selection
   const minDuration = 1;
