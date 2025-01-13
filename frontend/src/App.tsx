@@ -11,7 +11,7 @@ import './App.css';
 
 function App() {
 
-  const endpoint = 'https://loopfinder-server-441617759725.us-east4.run.app';
+  const endpoint = 'https://loop-finder-production.up.railway.app';
 
   //Video Selection
   const minDuration = 1;
